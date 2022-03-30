@@ -39,4 +39,4 @@ remote settings:
   "cmake.cmakePath": "/usr/sbin/cmake"
 }
 
-preuredit export.sh tako da ne detektira esp-idf dir nego ga settat apsolutno i postavit export.sh u /etc/profile.d/
+preuredit export.sh tako da ne detektira esp-idf dir nego ga settat apsolutno i postavit export.sh u /etc/profile.d/ #### ili u /etc/bash.bashrc jer nekad nece ono
