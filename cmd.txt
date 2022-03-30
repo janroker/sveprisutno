@@ -38,3 +38,5 @@ remote settings:
   "C_Cpp.default.compilerPath": "/root/.espressif/tools/xtensa-esp32-elf/esp-2021r2-patch3-8.4.0/xtensa-esp32-elf/bin/xtensa-esp32-elf-gcc",
   "cmake.cmakePath": "/usr/sbin/cmake"
 }
+
+preuredit export.sh tako da ne detektira esp-idf dir nego ga settat apsolutno i postavit export.sh u /etc/profile.d/
