@@ -1,0 +1,16 @@
+{
+  "idf.adapterTargetName": "esp32",
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "idf.flashType": "UART",
+  "idf.espIdfPath": "/root/esp/esp-idf",
+  "idf.customExtraVars": "{\"OPENOCD_SCRIPTS\":\"/root/.espressif/tools/openocd-esp32/v0.11.0-esp32-20211220/openocd-esp32/share/openocd/scripts\",\"IDF_PYTHON_ENV_PATH\":\"/root/.espressif/python_env/idf5.0_py3.10_env\",\"IDF_PATH\":\"/root/esp/esp-idf\",\"ESP_IDF_VERSION\":5.0,\"IDF_TOOLS_EXPORT_CMD\":\"/root/esp/esp-idf/export.sh\",\"IDF_TOOLS_INSTALL_CMD\":\"/root/esp/esp-idf/install.sh\"}",
+  "idf.pythonBinPath": "/root/.espressif/python_env/idf5.0_py3.10_env/bin/python",
+  "idf.openOcdConfigs": [
+      "interface/ftdi/esp32_devkitj_v1.cfg",
+      "board/esp32-wrover.cfg"
+  ],
+  "idf.port": "/dev/ttyUSB0",
+  "idf.customExtraPaths": "/root/esp/esp-idf/components/esptool_py/esptool:/root/esp/esp-idf/components/espcoredump:/root/esp/esp-idf/components/partition_table:/root/esp/esp-idf/components/app_update:/root/.espressif/tools/xtensa-esp32-elf/esp-2021r2-patch3-8.4.0/xtensa-esp32-elf/bin:/root/.espressif/tools/esp32ulp-elf/2.28.51-esp-20191205/esp32ulp-elf-binutils/bin:/root/.espressif/tools/openocd-esp32/v0.11.0-esp32-20211220/openocd-esp32/bin:/root/.espressif/python_env/idf5.0_py3.10_env/bin:/root/esp/esp-idf/tools",
+  "C_Cpp.default.compilerPath": "/root/.espressif/tools/xtensa-esp32-elf/esp-2021r2-patch3-8.4.0/xtensa-esp32-elf/bin/xtensa-esp32-elf-gcc",
+  "cmake.cmakePath": "/usr/sbin/cmake"
+}
