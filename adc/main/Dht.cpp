@@ -4,7 +4,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
-// #include "rom/ets_sys.h"
+#include "debug.hpp"
+#include "rom/ets_sys.h"
 // #include "rom/gpio.h"
 // #include "soc/io_mux_reg.h"
 
@@ -18,11 +19,13 @@ Dht::Dht(uint8_t pin, uint32_t dhtTimerInterval)
     this->dhtTimerInterval = dhtTimerInterval;
 
     gpio_reset_pin(this->pin);
-    gpio_pad_select_gpio(this->pin); // TODO needed?
+   // gpio_pad_select_gpio(this->pin);  TODO needed?
     gpio_pullup_en(this->pin);
     gpio_set_direction(this->pin, GPIO_MODE_OUTPUT_OD);
     gpio_set_level(this->pin, 1);
 }
+
+portMUX_TYPE Dht::LOCK = portMUX_INITIALIZER_UNLOCKED;
 
 bool Dht::getDataRaw(std::array<uint8_t, 5> &data)
 {
@@ -30,7 +33,7 @@ bool Dht::getDataRaw(std::array<uint8_t, 5> &data)
     std::array<bool, Dht::DATA_WIDTH> buf{0};
 
     taskENTER_CRITICAL(&Dht::LOCK);
-    result = this->fetch_data(buf);
+    result = this->fetchData(buf);
     taskEXIT_CRITICAL(&Dht::LOCK);
 
     if (!result)
@@ -38,7 +41,7 @@ bool Dht::getDataRaw(std::array<uint8_t, 5> &data)
         return false;
     }
 
-    for (uint_8_t i = 0; i < 5; i++)
+    for (uint8_t i = 0; i < 5; i++)
     {
         data[i] = 0;
     }
@@ -47,7 +50,7 @@ bool Dht::getDataRaw(std::array<uint8_t, 5> &data)
     {
         // Read each bit into 'data' byte array...
         data[i / 8] <<= 1;
-        data[i / 8] |= bits[i];
+        data[i / 8] |= buf[i];
     }
 
     if (data[4] != ((data[0] + data[1] + data[2] + data[3]) & 0xFF))
@@ -55,6 +58,8 @@ bool Dht::getDataRaw(std::array<uint8_t, 5> &data)
         debug("Checksum invalid\n");
         return false;
     }
+    
+    return true;
 }
 
 bool Dht::getData(int16_t *humidity, int16_t *temperature)
@@ -89,13 +94,10 @@ bool Dht::getDataFloat(float *humidity, float *temperature)
 
 bool Dht::fetchData(std::array<bool, Dht::DATA_WIDTH> &buf)
 {
-    uint32_t lowDuration;
-    uint32_t highDuration;
-
     debug("Phase 1 start\n");
     // GPIO_OUTPUT_SET(pin, 0);
     gpio_set_level(this->pin, 0);
-    ets_delay_us(20000);
+    vTaskDelay(pdMS_TO_TICKS(2));
 
     // Open drain
     // GPIO_OUTPUT_SET(pin, 1);
@@ -126,6 +128,8 @@ bool Dht::fetchData(std::array<bool, Dht::DATA_WIDTH> &buf)
 
     for (uint32_t i = 0; i < Dht::DATA_WIDTH; i++)
     {
+        uint32_t lowDuration;
+        uint32_t highDuration;
         if (this->awaitPinState(55, true, &lowDuration) == false)
         {
             debug("LOW bit timeout\n");
@@ -136,7 +140,7 @@ bool Dht::fetchData(std::array<bool, Dht::DATA_WIDTH> &buf)
             debug("HIGHT bit timeout\n");
             return false;
         }
-        buf[i] = high_duration > low_duration;
+        buf[i] = highDuration > lowDuration;
     }
 
     gpio_set_direction(this->pin, GPIO_MODE_OUTPUT_OD);

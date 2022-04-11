@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <array>
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 
 // #define DHT11       11
@@ -21,11 +22,11 @@ public:
 
 private:
     static constexpr uint32_t DATA_WIDTH = 40;
-    static const portMUX_TYPE LOCK = portMUX_INITIALIZER_UNLOCKED;
+    static portMUX_TYPE LOCK;
 
     bool fetchData(std::array<bool, Dht::DATA_WIDTH> &buf);
     bool awaitPinState(uint32_t timeout, bool expectedPinState, uint32_t *duration);
-    int16_t convertData(uint8_t msb, uint8_t lsb)
+    int16_t convertData(uint8_t msb, uint8_t lsb);
 
     uint32_t dhtTimerInterval;
     gpio_num_t pin;
