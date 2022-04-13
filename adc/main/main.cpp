@@ -3,137 +3,111 @@
 #include <stdlib.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "driver/gpio.h"
-#include "soc/adc_channel.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
+#include "math.h"
 #include "Dht.hpp"
+#include "Adc.hpp"
 #include "debug.hpp"
 
 /* Can run 'make menuconfig' to choose the GPIO to blink,
    or you can edit the following line and set a number here.
 */
 #define DHT_GPIO CONFIG_DHT_GPIO
+#define BUTTON_GPIO 13
 
-TaskHandle_t xHandle = NULL;
-
-void main_task(void *pvParameter)
-{
-    Dht *dht = static_cast<Dht *>(pvParameter);
-    while (1)
-    {
-        float f_humidity, f_temp;
-        int16_t humidity, temp;
-
-        dht->getDataFloat(&f_humidity, &f_temp);
-
-        if (dht->getData(&humidity, &temp))
-        {
-            printf("DHT22 Temperature: %X, Humidity: %X", temp, humidity);
-        }
-        else
-        {
-            printf("DHT22 ERROR\n");
-        }
-
-        if (dht->getDataFloat(&f_humidity, &f_temp))
-        {
-            printf("DHT22 Temperature: %0.2f, Humidity: %0.2f\n", f_temp, f_humidity);
-        }
-        else
-        {
-            printf("DHT22 ERROR\n");
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(2000));
-    }
-}
-
-#define DEFAULT_VREF 1100 // Use adc2_vref_to_gpio() to obtain a better estimate
-#define NO_OF_SAMPLES 64  // Multisampling
-
-static esp_adc_cal_characteristics_t *adc_chars;
+#define DEFAULT_VREF 1100
+#define NO_OF_SAMPLES 64 // Multisampling
 
 static const adc1_channel_t channel = ADC1_GPIO34_CHANNEL;
 static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
 static const adc_atten_t atten = ADC_ATTEN_DB_11;
 static const adc_unit_t unit = ADC_UNIT_1;
 
-static void check_efuse(void)
+#define BETA 3950. // should match the Beta Coefficient of the thermistor
+#define R0 10000
+#define T0 298.15
+
+static spinlock_t lock;
+
+static volatile bool press = false;
+
+void readDHT(Dht *dht)
 {
-    // Check if TP is burned into eFuse
-    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK)
+
+    float f_humidity, f_temp;
+    int16_t humidity, temp;
+
+    if (dht->getData(&humidity, &temp))
     {
-        printf("eFuse Two Point: Supported\n");
+        debug("DHT22 Temperature: %X, Humidity: %X", temp, humidity);
+
+        dht->getDataFloat(humidity, temp, &f_humidity, &f_temp);
+        printf("DHT22 Temperature: %0.2f, Humidity: %0.2f\n", f_temp, f_humidity);
     }
     else
     {
-        printf("eFuse Two Point: NOT supported\n");
-    }
-    // Check Vref is burned into eFuse
-    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK)
-    {
-        printf("eFuse Vref: Supported\n");
-    }
-    else
-    {
-        printf("eFuse Vref: NOT supported\n");
+        debug("DHT22 ERROR\n");
     }
 }
 
-static void print_char_val_type(esp_adc_cal_value_t val_type)
+static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
-    if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP)
-    {
-        printf("Characterized using Two Point Value\n");
-    }
-    else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF)
-    {
-        printf("Characterized using eFuse Vref\n");
-    }
-    else
-    {
-        printf("Characterized using Default Vref\n");
-    }
+    press = true;
 }
 
 extern "C" void app_main()
 {
     debug("Start main");
 
-    Dht dht(DHT_GPIO, 2);
+    // install gpio isr service
+    gpio_install_isr_service(0);
 
-    debug("Start DHT22 task create");
-    xTaskCreate(&main_task, "main_task", 2048, &dht, 1, &xHandle);
-    debug("DHT22 task created");
+    gpio_num_t btnGpio = static_cast<gpio_num_t>(BUTTON_GPIO);
 
-    // Check if Two Point or Vref are burned into eFuse
-    check_efuse();
+    printf("configuring button\n");
 
-    // Configure ADC
-    adc1_config_width(width);
-    adc1_config_channel_atten(static_cast<adc1_channel_t>(channel), atten);
+    gpio_reset_pin(btnGpio);
+    //  // zero-initialize the config structure.
+    gpio_config_t io_conf = {};
+    io_conf.intr_type = GPIO_INTR_POSEDGE;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = (1ULL << BUTTON_GPIO);
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    gpio_config(&io_conf);
 
-    // Characterize ADC
-    adc_chars = static_cast<esp_adc_cal_characteristics_t *>(
-        calloc(1, sizeof(esp_adc_cal_characteristics_t)));
-    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_chars);
-    print_char_val_type(val_type);
+    printf("config complete\n");
 
-    // Continuously sample ADC1
+    spinlock_initialize(&lock);
+    Dht dht(DHT_GPIO, 2, &lock);
+
+    Adc adc(channel, width, atten, unit, NO_OF_SAMPLES, DEFAULT_VREF);
+
+    gpio_isr_handler_add(btnGpio, gpio_isr_handler, nullptr); // (void *)args);
+
     while (1)
     {
-        uint32_t adc_reading = 0;
-        // Multisampling
-        for (int i = 0; i < NO_OF_SAMPLES; i++)
+        if (press)
         {
-            adc_reading += adc1_get_raw((adc1_channel_t)channel);
-        }
-        adc_reading /= NO_OF_SAMPLES;
+            debug("Btn press");
 
-        // Convert adc_reading to voltage in mV
-        uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
-        printf("Raw: %d\tVoltage: %dmV\n", adc_reading, voltage);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+            readDHT(&dht);
+
+            debug("Get reading ADC");
+            uint32_t adc_reading = adc.getReadingRaw();
+
+            // Convert adc_reading to voltage in mV
+            uint32_t voltage = adc.getVoltage(adc_reading);
+
+            debug("Get reading ADC done");
+            printf("Raw: %d\tVoltage: %dmV\n", adc_reading, voltage);
+
+            float R = 10000 * (1 / (4095. / adc_reading - 1));
+            float l = log(R / R0);
+            float celsius = 1 / (l / BETA + 1.0 / T0) - 273.15; // B-parameter equation 1/T = 1/T0 + 1/B ln(R/R0) ;;; T0 = 25s ==> r0 = 10000
+            printf("NTC temperature: %f\n", celsius);
+
+            press = false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }

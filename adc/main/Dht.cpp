@@ -13,28 +13,42 @@
 // #define DHT_TIMER_INTERVAL   4
 // #define DHT_DATA_BITS  40
 
-Dht::Dht(uint8_t pin, uint32_t dhtTimerInterval)
+Dht::Dht(uint8_t pin, uint32_t dhtTimerInterval, spinlock_t *spinlock)
 {
     this->pin = static_cast<gpio_num_t>(pin);
     this->dhtTimerInterval = dhtTimerInterval;
+    this->spinlock = spinlock;
 
     gpio_reset_pin(this->pin);
-   // gpio_pad_select_gpio(this->pin);  TODO needed?
-    gpio_pullup_en(this->pin);
-    gpio_set_direction(this->pin, GPIO_MODE_OUTPUT_OD);
-    gpio_set_level(this->pin, 1);
-}
+    // zero-initialize the config structure.
+    gpio_config_t io_conf = {};
+    // interrupt
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    // set as input mode
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    // bit mask of the pins that you want to set,e.g.GPIO18/19
+    io_conf.pin_bit_mask = (1ULL << pin);
+    // disable pull-down mode
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    // disable pull-up mode
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    // configure GPIO with the given settings
+    gpio_config(&io_conf);
 
-portMUX_TYPE Dht::LOCK = portMUX_INITIALIZER_UNLOCKED;
+    gpio_set_level(this->pin, 1);
+
+    debug("PIN %u level %d", pin, gpio_get_level(this->pin));
+}
 
 bool Dht::getDataRaw(std::array<uint8_t, 5> &data)
 {
+
     bool result;
     std::array<bool, Dht::DATA_WIDTH> buf{0};
 
-    taskENTER_CRITICAL(&Dht::LOCK);
+    spinlock_acquire(this->spinlock, SPINLOCK_WAIT_FOREVER); // taskENTER_CRITICAL(this->spinlock);
     result = this->fetchData(buf);
-    taskEXIT_CRITICAL(&Dht::LOCK);
+    spinlock_release(this->spinlock);
 
     if (!result)
     {
@@ -58,13 +72,12 @@ bool Dht::getDataRaw(std::array<uint8_t, 5> &data)
         debug("Checksum invalid\n");
         return false;
     }
-    
+
     return true;
 }
 
 bool Dht::getData(int16_t *humidity, int16_t *temperature)
 {
-
     std::array<uint8_t, 5> data{};
     bool result = this->getDataRaw(data);
 
@@ -79,17 +92,14 @@ bool Dht::getData(int16_t *humidity, int16_t *temperature)
     return true;
 }
 
-bool Dht::getDataFloat(float *humidity, float *temperature)
+bool Dht::getDataFloat(int16_t humidity, int16_t temperature, float *fhumidity, float *ftemperature)
 {
-    int16_t i_humidity, i_temp;
+    if (!fhumidity || !ftemperature)
+        return false;
 
-    if (this->getData(&i_humidity, &i_temp))
-    {
-        *humidity = static_cast<float>(i_humidity) / 10;
-        *temperature = static_cast<float>(i_temp) / 10;
-        return true;
-    }
-    return false;
+    *fhumidity = static_cast<float>(humidity) / 10;
+    *ftemperature = static_cast<float>(temperature) / 10;
+    return true;
 }
 
 bool Dht::fetchData(std::array<bool, Dht::DATA_WIDTH> &buf)
@@ -97,7 +107,7 @@ bool Dht::fetchData(std::array<bool, Dht::DATA_WIDTH> &buf)
     debug("Phase 1 start\n");
     // GPIO_OUTPUT_SET(pin, 0);
     gpio_set_level(this->pin, 0);
-    vTaskDelay(pdMS_TO_TICKS(2));
+    ets_delay_us(20000);
 
     // Open drain
     // GPIO_OUTPUT_SET(pin, 1);
@@ -106,23 +116,24 @@ bool Dht::fetchData(std::array<bool, Dht::DATA_WIDTH> &buf)
     gpio_set_direction(this->pin, GPIO_MODE_INPUT);
 
     // Phase '2', 45us
-    if (this->awaitPinState(45, false, nullptr) == false)
+    uint32_t dur = 0;
+    if (this->awaitPinState(45, false, &dur) == false)
     {
-        debug("Phase 2 error\n");
+        debug("Phase 2 error, duration: %u\n", dur);
         return false;
     }
 
     // Phase '3', 85us
-    if (this->awaitPinState(85, true, nullptr) == false)
+    if (this->awaitPinState(85, true, &dur) == false)
     {
-        debug("Phase 3 error\n");
+        debug("Phase 3 error, duration: %u\n", dur);
         return false;
     }
 
     // Phase '4', 85us
-    if (this->awaitPinState(85, false, nullptr) == false)
+    if (this->awaitPinState(85, false, &dur) == false)
     {
-        debug("Phase 4 error\n");
+        debug("Phase 4 error, duration: %u\n", dur);
         return false;
     }
 
@@ -143,7 +154,7 @@ bool Dht::fetchData(std::array<bool, Dht::DATA_WIDTH> &buf)
         buf[i] = highDuration > lowDuration;
     }
 
-    gpio_set_direction(this->pin, GPIO_MODE_OUTPUT_OD);
+    gpio_set_direction(this->pin, GPIO_MODE_OUTPUT);
     gpio_set_level(this->pin, 1);
 
     return true;
