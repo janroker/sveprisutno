@@ -1,15 +1,19 @@
 # CLion remote docker environment (How to build docker container, run and stop it)
 #
 # Build and run:
-#   docker build -t clion/remote-cpp-env:0.5 -f Dockerfile.remote-cpp-env .
-#   docker run -d --cap-add sys_ptrace -p127.0.0.1:2222:22 --name clion_remote_env clion/remote-cpp-env:0.5
+#   docker build -t esp32:0.1 -f Dockerfile .
+#   docker run -d --cap-add sys_ptrace -p127.0.0.1:2222:22 -v /home/janroker/Documents/git:/root/git --device=/dev/ttyUSB0 --name esp32 esp32:0.1         
 #   ssh-keygen -f "$HOME/.ssh/known_hosts" -R "[localhost]:2222"
+# 	
+# 	for root ssh auth must run passwd on root or add pub_key as commented below -> line 66
+#	
+# 	docker exec -it esp32 /bin/sh
+#	passwd root
+#   ssh root@127.0.0.1 -p 2222
 #
 # stop:
-#   docker stop clion_remote_env
+#   docker stop esp32
 # 
-# ssh credentials (test user):
-#   user@password 
 
 FROM ubuntu:20.04
 
@@ -45,6 +49,7 @@ RUN apt-get update \
       libssl-dev \
       dfu-util \
       libusb-1.0-0 \
+      nano \
   && apt-get clean
 
 RUN ( \
@@ -57,10 +62,17 @@ RUN ( \
 
 RUN useradd -m user \
   && yes password | passwd user
+  
+# for ssh pubkey auth... RUN echo "PASTE_PUB_KEY" >> /root/.ssh/authorized_keys
+# else run docker exec -it container /bin/sh and passwd root...
 
 RUN usermod -s /bin/bash user
 RUN usermod -a -G dialout root && usermod -a -G dialout user
 
-RUN mkdir -p /root/esp && cd /root/esp && git clone --recursive https://github.com/espressif/esp-idf.git && cd /root/esp/esp-idf && ./install.sh esp32
+RUN mkdir -p /root/esp && cd /root/esp \
+	&& git clone --recursive https://github.com/espressif/esp-idf.git \
+	&& cd /root/esp/esp-idf && ./install.sh esp32
+	
+RUN echo ". /root/esp/esp-idf/export.sh" >> /etc/bash.bashrc
 
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]

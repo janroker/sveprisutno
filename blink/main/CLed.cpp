@@ -6,6 +6,7 @@
 #include "led_strip.h"
 #include "sdkconfig.h"
 #include "CLed.h"
+#include "esp_timer.h"
 
 //
 // CLED construction function

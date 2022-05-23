@@ -1,17 +1,58 @@
-docker run -dit -v /home/janroker/Documents/git:/root/git --device=/dev/ttyUSB0 archlinux
 
-usermod -a -G uucp root
+Build and run:
+   docker build -t esp32:0.1 -f Dockerfile .
+   docker run -d --cap-add sys_ptrace -p127.0.0.1:2222:22 -v /home/janroker/Documents/git:/root/git --device=/dev/ttyUSB0 --name esp32 esp32:0.1         
 
-pacman -S --needed gcc git make flex bison gperf python-pip cmake ninja ccache dfu-util libusb
+install docker extension for vscode
+in the docker tab -> attach vs code to the running container
+install "Espressif IDF", "c/c++" vscode extensions (inside docker remote container)
 
-mkdir -p ~/esp
-cd ~/esp
-git clone --recursive https://github.com/espressif/esp-idf.git
+// put the following files in the root of the project and modify paths as needed... 
+
+.vscode/settings.json: // mostly settings for Espressif IDF vs code extension
+	{
+	  "idf.espIdfPath": "/root/esp/esp-idf",
+	  "idf.customExtraVars": "{\"OPENOCD_SCRIPTS\":\"/root/.espressif/tools/openocd-esp32/v0.11.0-esp32-20211220/openocd-esp32/share/openocd/scripts\",\"IDF_PYTHON_ENV_PATH\":\"/root/.espressif/python_env/idf5.0_py3.10_env\",\"IDF_PATH\":\"/root/esp/esp-idf\",\"ESP_IDF_VERSION\":5.0,\"IDF_TOOLS_EXPORT_CMD\":\"/root/esp/esp-idf/export.sh\",\"IDF_TOOLS_INSTALL_CMD\":\"/root/esp/esp-idf/install.sh\"}",
+	  "idf.pythonBinPath": "/root/.espressif/python_env/idf5.0_py3.10_env/bin/python",
+	  "idf.openOcdConfigs": [
+		"interface/ftdi/esp32_devkitj_v1.cfg",
+		"board/esp32-wrover.cfg"
+	  ],
+	  "idf.port": "/dev/ttyUSB0",
+	  "idf.customExtraPaths": "/root/esp/esp-idf/components/esptool_py/esptool:/root/esp/esp-idf/components/espcoredump:/root/esp/esp-idf/components/partition_table:/root/esp/esp-idf/components/app_update:/root/.espressif/tools/xtensa-esp32-elf/esp-2021r2-patch3-8.4.0/xtensa-esp32-elf/bin:/root/.espressif/tools/esp32ulp-elf/2.28.51-esp-20191205/esp32ulp-elf-binutils/bin:/root/.espressif/tools/openocd-esp32/v0.11.0-esp32-20211220/openocd-esp32/bin:/root/.espressif/python_env/idf5.0_py3.10_env/bin:/root/esp/esp-idf/tools",
+	  "C_Cpp.default.compilerPath": "/root/.espressif/tools/xtensa-esp32-elf/esp-2021r2-patch3-8.4.0/xtensa-esp32-elf/bin/xtensa-esp32-elf-gcc",
+	  "cmake.cmakePath": "/usr/sbin/cmake"
+	}
 
 
-/root/esp/esp-idf/tools/python_env/idf4.4_py3.10_env/bin/python ../../../esp/esp-idf/components/esptool_py/esptool/esptool.py -p /dev/ttyUSB0 -b 460800 --before default_reset --after hard_reset --chip esp32  write_flash --flash_mode dio --flash_size detect --flash_freq 40m 0x1000 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0x10000 build/blink.bin
+.vscode/c_cpp_properties.json:
+	{
+		"env": {
+		  "myDefaultIncludePath": ["${workspaceFolder}", "${workspaceFolder}/include"],
+		  "myCompilerPath": "/root/.espressif/tools/xtensa-esp32-elf/esp-2021r2-patch3-8.4.0/xtensa-esp32-elf/bin/xtensa-esp32-elf-gcc"
+		},
+		"configurations": [
+		  {
+		    "name": "Li",
+		    "intelliSenseMode": "clang-x64",
+		    "includePath": ["${myDefaultIncludePath}", ""],
+		    "defines": [],
+		    "forcedInclude": [""],
+		    "compilerPath": "${myCompilerPath}",
+		    "cStandard": "c11",
+		    "cppStandard": "c++17",
+		    "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+		    "browse": {
+		      "path": ["${workspaceFolder}"],
+		      "limitSymbolsToIncludedHeaders": true,
+		      "databaseFilename": ""
+		    }
+		  }
+		],
+		"version": 4
+	}
 
-https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/linux-macos-setup.html#id1
+
 
 idf.py set-target esp32
 idf.py menuconfig
@@ -23,20 +64,17 @@ idf.py -p PORT [-b BAUD] flash
 idf.py -p <PORT> monitor
 
 
-remote settings:
+build/flash/monitor:
 
-{
-  "idf.espIdfPath": "/root/esp/esp-idf",
-  "idf.customExtraVars": "{\"OPENOCD_SCRIPTS\":\"/root/.espressif/tools/openocd-esp32/v0.11.0-esp32-20211220/openocd-esp32/share/openocd/scripts\",\"IDF_PYTHON_ENV_PATH\":\"/root/.espressif/python_env/idf5.0_py3.10_env\",\"IDF_PATH\":\"/root/esp/esp-idf\",\"ESP_IDF_VERSION\":5.0,\"IDF_TOOLS_EXPORT_CMD\":\"/root/esp/esp-idf/export.sh\",\"IDF_TOOLS_INSTALL_CMD\":\"/root/esp/esp-idf/install.sh\"}",
-  "idf.pythonBinPath": "/root/.espressif/python_env/idf5.0_py3.10_env/bin/python",
-  "idf.openOcdConfigs": [
-    "interface/ftdi/esp32_devkitj_v1.cfg",
-    "board/esp32-wrover.cfg"
-  ],
-  "idf.port": "/dev/ttyUSB0",
-  "idf.customExtraPaths": "/root/esp/esp-idf/components/esptool_py/esptool:/root/esp/esp-idf/components/espcoredump:/root/esp/esp-idf/components/partition_table:/root/esp/esp-idf/components/app_update:/root/.espressif/tools/xtensa-esp32-elf/esp-2021r2-patch3-8.4.0/xtensa-esp32-elf/bin:/root/.espressif/tools/esp32ulp-elf/2.28.51-esp-20191205/esp32ulp-elf-binutils/bin:/root/.espressif/tools/openocd-esp32/v0.11.0-esp32-20211220/openocd-esp32/bin:/root/.espressif/python_env/idf5.0_py3.10_env/bin:/root/esp/esp-idf/tools",
-  "C_Cpp.default.compilerPath": "/root/.espressif/tools/xtensa-esp32-elf/esp-2021r2-patch3-8.4.0/xtensa-esp32-elf/bin/xtensa-esp32-elf-gcc",
-  "cmake.cmakePath": "/usr/sbin/cmake"
-}
+	   	press F1 and setup ESP-IDF for ESP32: (this options are also available at the bottom of the vscode GUI)
 
-preuredit export.sh tako da ne detektira esp-idf dir nego ga settat apsolutno i postavit export.sh u /etc/profile.d/ #### ili u /etc/bash.bashrc jer nekad nece ono
+        a. ESP-IDF: Select port to use
+        b. ESP-IDF: Set Espressif device target
+        c. ESP-IDF: Build project
+        d. ESP-IDF: Flash (UART) your project
+        e. ESP-IDF: Monitor your 
+
+
+Linux setup documentation:
+	https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/linux-macos-setup.html
+
