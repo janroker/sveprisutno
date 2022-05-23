@@ -5,7 +5,9 @@
 #   docker run -d --cap-add sys_ptrace -p127.0.0.1:2222:22 -v /home/janroker/Documents/git:/root/git --device=/dev/ttyUSB0 --name esp32 esp32:0.1         
 #   ssh-keygen -f "$HOME/.ssh/known_hosts" -R "[localhost]:2222"
 # 	
-# 	for root ssh auth must run passwd on root or add pub_key as commented below -> line 66
+# 	for root ssh: 
+#		use password="password" or
+#   	add pub_key as commented below -> line 69
 #	
 # 	docker exec -it esp32 /bin/sh
 #	passwd root
@@ -61,10 +63,11 @@ RUN ( \
   && mkdir /run/sshd
 
 RUN useradd -m user \
-  && yes password | passwd user
-  
-# for ssh pubkey auth... RUN echo "PASTE_PUB_KEY" >> /root/.ssh/authorized_keys
-# else run docker exec -it container /bin/sh and passwd root...
+  && yes password | passwd user \
+  && yes password | passwd root
+
+# uncomment for ssh pubkey auth...  
+#RUN echo "PASTE_PUB_KEY" >> /root/.ssh/authorized_keys
 
 RUN usermod -s /bin/bash user
 RUN usermod -a -G dialout root && usermod -a -G dialout user
