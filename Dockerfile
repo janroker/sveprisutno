@@ -46,6 +46,7 @@ RUN apt-get update \
       python3 \
       python3-pip \
       python3-setuptools \ 
+      python3-venv \
       ccache \
       libffi-dev \
       libssl-dev \
@@ -66,8 +67,7 @@ RUN useradd -m user \
   && yes password | passwd user \
   && yes password | passwd root
 
-# uncomment for ssh pubkey auth...  
-#RUN echo "PASTE_PUB_KEY" >> /root/.ssh/authorized_keys
+RUN mkdir -p /root/.ssh && echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPht+aulROrMiA5JdL82rKs1p/EqitQYWH9MgK0weS9R jan.rocek@fer.hr" >> /root/.ssh/authorized_keys
 
 RUN usermod -s /bin/bash user
 RUN usermod -a -G dialout root && usermod -a -G dialout user
